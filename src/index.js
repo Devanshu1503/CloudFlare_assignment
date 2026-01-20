@@ -17,7 +17,68 @@ export default {
     const url = new URL(request.url);
     const { pathname } = url;
 
-    // POST /api/feedback
+    /**
+     * Root UI – simple HTML viewer
+     */
+    if (pathname === "/") {
+      const { results } = await env.feedback_db
+        .prepare(
+          "SELECT content, summary, summarized, created_at FROM feedback ORDER BY created_at DESC LIMIT 10"
+        )
+        .run();
+
+      const rows = results.length
+        ? results
+            .map(
+              (r) => `
+              <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #ddd;">
+                <div><strong>Feedback:</strong> ${r.content}</div>
+                <div><strong>Summary:</strong> ${
+                  r.summarized ? r.summary : "<em>Not summarized yet</em>"
+                }</div>
+              </div>
+            `
+            )
+            .join("")
+        : "<p>No feedback submitted yet.</p>";
+
+      return new Response(
+        `
+        <html>
+          <head>
+            <title>Feedback Summarizer Prototype</title>
+          </head>
+          <body style="font-family: Arial, sans-serif; padding: 24px;">
+            <h2>Cloudflare Feedback Summarizer Prototype</h2>
+
+            <p>
+              This prototype collects user feedback, stores it in a D1 database,
+              and uses Workers AI to generate short summaries.
+            </p>
+
+            <h3>Recent Feedback</h3>
+            ${rows}
+
+            <h3>How to Use</h3>
+            <pre>
+POST /api/feedback
+POST /api/summarize
+GET  /debug/feedback
+            </pre>
+
+            <p>
+              This UI is  minimal and is meant to surface backend behavior. Thanks for visiting!
+            </p>
+          </body>
+        </html>
+        `,
+        { headers: { "Content-Type": "text/html" } }
+      );
+    }
+
+    /**
+     * POST /api/feedback
+     */
     if (pathname === "/api/feedback" && request.method === "POST") {
       const body = await request.json();
       const { source, content } = body;
@@ -41,7 +102,9 @@ export default {
       return new Response(JSON.stringify({ success: true }), { status: 201 });
     }
 
-    // POST /api/summarize
+    /**
+     * POST /api/summarize
+     */
     if (pathname === "/api/summarize" && request.method === "POST") {
       const { results } = await env.feedback_db
         .prepare(
@@ -59,8 +122,7 @@ export default {
           }
         );
 
-        const summary =
-          aiResponse?.response || "Summary unavailable";
+        const summary = aiResponse?.response || "Summary unavailable";
 
         await env.feedback_db
           .prepare(
@@ -78,7 +140,9 @@ export default {
       );
     }
 
-    // GET /debug/feedback
+    /**
+     * GET /debug/feedback
+     */
     if (pathname === "/debug/feedback") {
       const { results } = await env.feedback_db
         .prepare("SELECT * FROM feedback")
@@ -90,9 +154,12 @@ export default {
       });
     }
 
+    /**
+     * Fallback
+     */
     return new Response(
-      "OK. Try POST /api/feedback, POST /api/summarize, or GET /debug/feedback",
-      { status: 200 }
+      "Not found. Visit / for UI or use API endpoints.",
+      { status: 404 }
     );
   },
 };
